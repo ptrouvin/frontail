@@ -37,7 +37,32 @@ var (
 		ReadBufferSize:  1024,
 		WriteBufferSize: 1024,
 	}
+	filePosPerIP map[string]int64
 )
+
+func getFilePos(ip string) int64 {
+	if lastPos,ok := filePosPerIP[ip]; ok {
+		log.Debug().
+			Str("ip", ip).
+			Int64("lastPos", lastPos).
+			Msg("getFilePos")
+		return lastPos
+	}
+	log.Debug().
+		Str("ip", ip).
+		Int64("lastPos", 0).
+		Msg("getFilePos")
+	//filePosPerIP[ip]=0
+	return 0
+}
+
+func setFilePos(ip string, lastPos int64){
+	log.Debug().
+		Str("ip", ip).
+		Int64("lastPos", lastPos).
+		Msg("setFilePos")
+	filePosPerIP[ip] = lastPos
+}
 
 func readFileIfModified(lastMod time.Time, lastPos int64) ([]byte, time.Time, int64, error) {
 	log.Debug().
@@ -141,7 +166,7 @@ func reader(ws *websocket.Conn) {
 	}
 }
 
-func writer(ws *websocket.Conn, lastMod time.Time, lastPos int64) {
+func writer(ws *websocket.Conn, lastMod time.Time, lastPos int64, ip string) {
 	lastError := ""
 	pingTicker := time.NewTicker(pingPeriod)
 	fileTicker := time.NewTicker(filePeriod)
@@ -172,6 +197,8 @@ func writer(ws *websocket.Conn, lastMod time.Time, lastPos int64) {
 				if err := ws.WriteMessage(websocket.TextMessage, p); err != nil {
 					return
 				}
+				
+				setFilePos(ip, lastPos)
 			}
 		case <-pingTicker.C:
 			ws.SetWriteDeadline(time.Now().Add(writeWait))
@@ -182,7 +209,7 @@ func writer(ws *websocket.Conn, lastMod time.Time, lastPos int64) {
 	}
 }
 
-func logClientIP(r *http.Request) {
+func logClientIP(r *http.Request) string {
 	IPAddress := r.Header.Get("X-Real-Ip")
   if IPAddress == "" {
       IPAddress = r.Header.Get("X-Forwarded-For")
@@ -201,17 +228,18 @@ func logClientIP(r *http.Request) {
   if userIP == nil {
 			log.Error().
 				Msgf("userip: %q is not IP:port", IPAddress)
-      return
+      return ""
   }
 	userIPstr := userIP.String()
 	log.Info().
 		Str("ip", userIPstr).
 		Str("port", port).
 		Msg("Connected from")
+	return ip
 }
 
 func serveWs(w http.ResponseWriter, r *http.Request) {
-	logClientIP(r)
+	var ip = logClientIP(r)
 
 	ws, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
@@ -231,14 +259,16 @@ func serveWs(w http.ResponseWriter, r *http.Request) {
 	var lastPos int64
 	if n, err := strconv.ParseInt(r.FormValue("lastPos"), 10, 64); err == nil {
 		lastPos = n
+	} else {
+		lastPos = getFilePos(ip)
 	}
 
-	go writer(ws, lastMod, lastPos)
+	go writer(ws, lastMod, lastPos, ip)
 	reader(ws)
 }
 
 func serveHome(w http.ResponseWriter, r *http.Request) {
-	logClientIP(r)
+	var ip = logClientIP(r)
 
 	if r.URL.Path != "/" {
 		http.Error(w, "Not found", http.StatusNotFound)
@@ -248,15 +278,21 @@ func serveHome(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+	var lastPos int64
+	if n, err := strconv.ParseInt(r.FormValue("lastPos"), 10, 64); err == nil {
+		lastPos = n
+	} else {
+		lastPos = getFilePos(ip)
+	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	p, lastMod, lastPos, err := readFileIfModified(time.Time{}, 0)
+	p, lastMod, lastPos, err := readFileIfModified(time.Time{}, lastPos)
 	if err != nil {
 		log.Error().
 			Err(err).
 			Msg("serverHome.readFileIfModified ERROR")
 		p = []byte(err.Error())
 		lastMod = time.Unix(0, 0)
-		lastPos = 0
+		lastPos = getFilePos(ip)
 	}
 	log.Debug().
 		Int("Data_length", len(string(p))).
@@ -306,6 +342,8 @@ func main() {
 	log.Info().
 		Str("loglevel", *loglevelPtr).
 		Msg("frontail started")
+		
+	filePosPerIP = make(map[string]int64)
 
 	http.HandleFunc("/", serveHome)
 	http.HandleFunc("/ws", serveWs)
