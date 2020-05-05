@@ -18,3 +18,26 @@ Frontail is written in Go to provide a fast and easy way to stream contents of a
 
 * Repo owner or admin:
     `Krishna Modi <krish512@hotmail.com>`
+
+
+## systemd service
+
+Create the /lib/systemd/system/frontail.service file
+
+```systemctl
+[Unit]
+Description=logstream using frontail
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/frontail -p 8081 /var/log/eos/logstream-for-tcl.log
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Then
+```shell
+sudo systemctl start|stop|status|enable frontail
+```
+
