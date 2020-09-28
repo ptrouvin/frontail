@@ -6,12 +6,13 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"regexp"
 	"strconv"
 	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/rs/zerolog"
-  "github.com/rs/zerolog/log"
+	"github.com/rs/zerolog/log"
 )
 
 const (
@@ -29,19 +30,21 @@ const (
 )
 
 var (
-	portPtr   = flag.Int("p", 8080, "port number as an int")
+	portPtr     = flag.Int("p", 8080, "port number as an int")
 	loglevelPtr = flag.String("loglevel", "info", "Define the loglevel: debug,info,warning,error")
-	homeTempl = template.Must(template.New("").Parse(homeHTML))
-	filename  string
-	upgrader  = websocket.Upgrader{
+	skipRePtr   = flag.String("skip", "", "Define the regexp of characters to skip. Like '^[^{]*' to skip any leading chars before the first '{'.")
+	homeTempl   = template.Must(template.New("").Parse(homeHTML))
+	filename    string
+	upgrader    = websocket.Upgrader{
 		ReadBufferSize:  1024,
 		WriteBufferSize: 1024,
 	}
 	filePosPerIP map[string]int64
+	skipRe       *regexp.Regexp
 )
 
 func getFilePos(ip string) int64 {
-	if lastPos,ok := filePosPerIP[ip]; ok {
+	if lastPos, ok := filePosPerIP[ip]; ok {
 		log.Debug().
 			Str("ip", ip).
 			Int64("lastPos", lastPos).
@@ -56,7 +59,7 @@ func getFilePos(ip string) int64 {
 	return 0
 }
 
-func setFilePos(ip string, lastPos int64){
+func setFilePos(ip string, lastPos int64) {
 	log.Debug().
 		Str("ip", ip).
 		Int64("lastPos", lastPos).
@@ -121,6 +124,11 @@ func readFileIfModified(lastMod time.Time, lastPos int64) ([]byte, time.Time, in
 				Msg("Read ERROR")
 			return nil, fi.ModTime(), lastPos, err
 		}
+		if skipRe != nil {
+			// a skip regexp was provided
+			p1 := p
+			p = skipRe.ReplaceAll(p1, []byte(""))
+		}
 		log.Debug().
 			Int64("fileSize", fi.Size()).
 			Int64("lastPos", lastPos).
@@ -129,7 +137,7 @@ func readFileIfModified(lastMod time.Time, lastPos int64) ([]byte, time.Time, in
 			Int("data_length", len(p)).
 			Msg("File READ")
 	}
-	curPos, err := f.Seek(0,1)
+	curPos, err := f.Seek(0, 1)
 	if err != nil {
 		log.Error().
 			Err(err).
@@ -197,7 +205,7 @@ func writer(ws *websocket.Conn, lastMod time.Time, lastPos int64, ip string) {
 				if err := ws.WriteMessage(websocket.TextMessage, p); err != nil {
 					return
 				}
-				
+
 				setFilePos(ip, lastPos)
 			}
 		case <-pingTicker.C:
@@ -211,25 +219,25 @@ func writer(ws *websocket.Conn, lastMod time.Time, lastPos int64, ip string) {
 
 func logClientIP(r *http.Request) string {
 	IPAddress := r.Header.Get("X-Real-Ip")
-  if IPAddress == "" {
-      IPAddress = r.Header.Get("X-Forwarded-For")
-  }
-  if IPAddress == "" {
-      IPAddress = r.RemoteAddr
-  }
+	if IPAddress == "" {
+		IPAddress = r.Header.Get("X-Forwarded-For")
+	}
+	if IPAddress == "" {
+		IPAddress = r.RemoteAddr
+	}
 	ip, port, err := net.SplitHostPort(IPAddress)
-  if err != nil {
-			log.Error().
-				Err(err).
-				Msgf("userip: %q is not IP:port", IPAddress)
-  }
+	if err != nil {
+		log.Error().
+			Err(err).
+			Msgf("userip: %q is not IP:port", IPAddress)
+	}
 
-  userIP := net.ParseIP(ip)
-  if userIP == nil {
-			log.Error().
-				Msgf("userip: %q is not IP:port", IPAddress)
-      return ""
-  }
+	userIP := net.ParseIP(ip)
+	if userIP == nil {
+		log.Error().
+			Msgf("userip: %q is not IP:port", IPAddress)
+		return ""
+	}
 	userIPstr := userIP.String()
 	log.Info().
 		Str("ip", userIPstr).
@@ -319,8 +327,6 @@ func main() {
 	flag.Parse()
 	if flag.NArg() != 1 {
 		flag.Usage()
-		// fmt.Print("Usage: frontail [-p 8080] /path/filename\n\n")
-		// fmt.Print("-p	listen port	8080\n\n")
 		os.Exit(1)
 	}
 	filename = flag.Args()[0]
@@ -339,10 +345,14 @@ func main() {
 		os.Exit(1)
 	}
 
+	if len(*skipRePtr) > 0 {
+		skipRe = regexp.MustCompile(`(?m)` + *skipRePtr)
+	}
+
 	log.Info().
 		Str("loglevel", *loglevelPtr).
 		Msg("frontail started")
-		
+
 	filePosPerIP = make(map[string]int64)
 
 	http.HandleFunc("/", serveHome)
