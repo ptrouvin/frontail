@@ -1,0 +1,12 @@
+Source: frontail
+Maintainer: pascal TROUVIN <pascal.trouvin@oasis-smartsim.com>
+Section: misc
+Priority: optional
+Standards-Version: 1.0.0
+Build-Depends: debhelper (>= 9)
+
+Package: frontail
+Architecture: amd64
+Depends: ${shlibs:Depends}
+Description: webized version of tail
+ 

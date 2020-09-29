@@ -41,3 +41,6 @@ Then
 sudo systemctl start|stop|status|enable frontail
 ```
 
+# DEBIAN package build
+
+Look at [Packaging - getting started](https://wiki.debian.org/Packaging/Intro?action=show&redirect=IntroDebianPackaging)
