@@ -44,3 +44,24 @@ sudo systemctl start|stop|status|enable frontail
 # DEBIAN package build
 
 Look at [Packaging - getting started](https://wiki.debian.org/Packaging/Intro?action=show&redirect=IntroDebianPackaging)
+
+* Build the source tar
+```shell
+tar czvf frontail_1.0.0.orig.tar.gz Dockerfile main.go README.md Makefile frontail.systemd frontail.1
+```
+
+```shell
+cd build
+tar xzvf ../frontail_1.0.0.orig.tar.gz
+```
+
+* maintain the changelog file
+
+* build the package
+```shell
+debuild -us -uc
+cd ..
+```
+
+* the location of the .deb package
+Into the main directory:

@@ -1,0 +1,9 @@
+[Unit]
+Description=logstream using frontail
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/frontail -p 8081 /var/log/eos/logstream-for-tcl.log
+
+[Install]
+WantedBy=multi-user.target

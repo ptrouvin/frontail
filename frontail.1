@@ -1,0 +1,27 @@
+.TH FRONTAIL 1
+.SH NAME
+frontail \- webized version of tail
+.SH SYNOPSIS
+.B frontail
+[\fB\-p\fR \fIport\fR]
+[\fB\-skip=\fIregexp\fR]
+.IR file-location
+.SH DESCRIPTION
+.B frontail
+is a web version of
+.I tail \-f.
+It is publishing on a network socket (web compatible) the latest lines of a file.
+.SH OPTIONS
+.TP
+.BR \-p " "\fIport\fR
+Define the listening port.
+.TP
+.B \-skip=\fIregexp\fR
+Define with a 
+.I regular expression
+(regexp) the character string to remove.
+.RS
+Example:
+.B \-skip=^[^{]*
+will remove any character before the first '{'.
+

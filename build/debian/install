@@ -1,0 +1,3 @@
+../frontail usr/bin
+../frontail.service lib/systemd/system
+../frontail.1 usr/share/man/man1

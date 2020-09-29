@@ -1,5 +1,12 @@
-frontail (1.0.0) UNRELEASED; urgency=medium
+frontail (1.0.0-1) UNRELEASED; urgency=medium
 
-  * Initial release. (Closes: #XXXXXX)
+  * 1.0.0-1 (29/09/2020)
+  --------------------
+  version 1.0.0 debian package
 
- -- Pascal TROUVIN <pascal.trouvin@oasis-smartsim.com>  Tue, 29 Sep 2020 09:10:48 +0200
+  * Initial release.
+  -skip=regexp   to remove (regexp) matching leading string.
+  Create debian package to ease installation.
+  Add man page (man1) to frontail.
+
+ -- Pascal TROUVIN <pascal.trouvin@oasis-smartsim.com>  Tue, 29 Sep 2020 15:10:48 +0200
