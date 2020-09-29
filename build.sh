@@ -33,5 +33,7 @@ cd build
 tar czf ../frontail_${lTag}.orig.tar.gz
 debuild -us -uc
 
+debsign
+
 cd -
 dpkg -c $debPkg
