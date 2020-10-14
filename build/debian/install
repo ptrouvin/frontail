@@ -1,3 +1,4 @@
 ../frontail usr/bin
+../config.ini etc/frontail
 ../frontail.service lib/systemd/system
 ../frontail.1 usr/share/man/man1

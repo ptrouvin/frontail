@@ -8,7 +8,10 @@ import (
 	"os"
 	"regexp"
 	"strconv"
+	"strings"
 	"time"
+
+	"github.com/vharitonsky/iniflags"
 
 	"github.com/gorilla/websocket"
 	"github.com/rs/zerolog"
@@ -30,17 +33,19 @@ const (
 )
 
 var (
-	portPtr     = flag.Int("p", 8080, "port number as an int")
+	portPtr     = flag.Int("port", 8080, "port number as an int")
 	loglevelPtr = flag.String("loglevel", "info", "Define the loglevel: debug,info,warning,error")
 	skipRePtr   = flag.String("skip", "", "Define the regexp of characters to skip. Like '^[^{]*' to skip any leading chars before the first '{'.")
 	homeTempl   = template.Must(template.New("").Parse(homeHTML))
-	filename    string
+	filename    = flag.String("filename", "", "Filename to publish")
+	grepRePtr   = flag.String("grep", ".*", "Define the regexp to select lines to push")
 	upgrader    = websocket.Upgrader{
 		ReadBufferSize:  1024,
 		WriteBufferSize: 1024,
 	}
 	filePosPerIP map[string]int64
 	skipRe       *regexp.Regexp
+	grepRe       *regexp.Regexp
 )
 
 func getFilePos(ip string) int64 {
@@ -72,11 +77,11 @@ func readFileIfModified(lastMod time.Time, lastPos int64) ([]byte, time.Time, in
 		Int64("lastMod", lastMod.Unix()).
 		Int64("lastPos", lastPos).
 		Msg("Called")
-	fi, err := os.Stat(filename)
+	fi, err := os.Stat(*filename)
 	if err != nil {
 		log.Error().
 			Err(err).
-			Str("filename", filename).
+			Str("filename", *filename).
 			Msg("Stat ERROR")
 		return nil, lastMod, lastPos, err
 	}
@@ -85,11 +90,11 @@ func readFileIfModified(lastMod time.Time, lastPos int64) ([]byte, time.Time, in
 			Msg("lastMod>ModTime")
 		return nil, lastMod, lastPos, nil
 	}
-	f, err := os.Open(filename)
+	f, err := os.Open(*filename)
 	if err != nil {
 		log.Error().
 			Err(err).
-			Str("filename", filename).
+			Str("filename", *filename).
 			Msg("Open ERROR")
 		return nil, lastMod, lastPos, nil
 	}
@@ -201,11 +206,17 @@ func writer(ws *websocket.Conn, lastMod time.Time, lastPos int64, ip string) {
 			}
 
 			if p != nil && len(p) > 0 {
-				ws.SetWriteDeadline(time.Now().Add(writeWait))
-				if err := ws.WriteMessage(websocket.TextMessage, p); err != nil {
-					return
+				for _, line := range strings.Split(strings.TrimSuffix(string(p), "\n"), "\n") {
+					if grepRe.Match([]byte(line)) {
+						log.Debug().Msg("DBG>line sent " + line)
+						ws.SetWriteDeadline(time.Now().Add(writeWait))
+						if err := ws.WriteMessage(websocket.TextMessage, []byte(line+"\n")); err != nil {
+							return
+						}
+					} else {
+						log.Debug().Msg("DBG>line dropped " + line)
+					}
 				}
-
 				setFilePos(ip, lastPos)
 			}
 		case <-pingTicker.C:
@@ -307,6 +318,18 @@ func serveHome(w http.ResponseWriter, r *http.Request) {
 		Int64("lastMod", lastMod.Unix()).
 		Int64("lastPos", lastPos).
 		Msg("serverHome.readFileIfModified")
+
+	// filtering strings
+	p1 := ""
+	for _, line := range strings.Split(strings.TrimSuffix(string(p), "\n"), "\n") {
+		if grepRe.Match([]byte(line)) {
+			log.Debug().Msg("DBG>line sent " + line)
+			p1 += line + "\n"
+		} else {
+			log.Debug().Msg("DBG>line dropped " + line)
+		}
+	}
+
 	var v = struct {
 		Host     string
 		Data     string
@@ -315,21 +338,20 @@ func serveHome(w http.ResponseWriter, r *http.Request) {
 		Filename string
 	}{
 		r.Host + r.URL.Path,
-		string(p),
+		p1,
 		strconv.FormatInt(lastMod.Unix(), 10),
 		strconv.FormatInt(lastPos, 10),
-		filename,
+		*filename,
 	}
 	homeTempl.Execute(w, &v)
 }
 
 func main() {
-	flag.Parse()
-	if flag.NArg() != 1 {
+	iniflags.Parse()
+	if len(*filename) == 0 {
 		flag.Usage()
 		os.Exit(1)
 	}
-	filename = flag.Args()[0]
 
 	switch *loglevelPtr {
 	case "debug":
@@ -349,9 +371,13 @@ func main() {
 		skipRe = regexp.MustCompile(`(?m)` + *skipRePtr)
 	}
 
+	if len(*grepRePtr) > 0 {
+		grepRe = regexp.MustCompile(`(?m)` + *grepRePtr)
+	}
+
 	log.Info().
 		Str("loglevel", *loglevelPtr).
-		Msg("frontail started")
+		Msg("frontail started, monitoring file(" + *filename + ") SKIP=" + *skipRePtr + " GREP=" + *grepRePtr)
 
 	filePosPerIP = make(map[string]int64)
 
