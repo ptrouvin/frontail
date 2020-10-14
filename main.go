@@ -200,7 +200,7 @@ func writer(ws *websocket.Conn, lastMod time.Time, lastPos int64, ip string) {
 				lastError = ""
 			}
 
-			if p != nil {
+			if p != nil && len(p) > 0 {
 				ws.SetWriteDeadline(time.Now().Add(writeWait))
 				if err := ws.WriteMessage(websocket.TextMessage, p); err != nil {
 					return
