@@ -468,7 +468,7 @@ const homeHTML = `<!DOCTYPE html>
 			var data = document.getElementById("fileData");
 			fmt(input);
 
-			var conn = new WebSocket("ws://{{.Host}}ws?lastMod={{.LastMod}}&lastPos={{.LastPos}}");
+			var conn = new WebSocket("ws://{{.Host}}/ws?lastMod={{.LastMod}}&lastPos={{.LastPos}}");
 			conn.onclose = function(evt) {
 				data.textContent = 'Connection closed';
 			}
