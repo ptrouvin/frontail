@@ -3,7 +3,7 @@ Description=logstream using frontail
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/frontail -p 8081 /var/log/eos/logstream-for-tcl.log
+ExecStart=/usr/local/bin/frontail -config=/etc/frontail/config.ini
 
 [Install]
 WantedBy=multi-user.target
