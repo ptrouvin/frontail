@@ -337,7 +337,7 @@ func serveHome(w http.ResponseWriter, r *http.Request) {
 		LastPos  string
 		Filename string
 	}{
-		r.Host + r.URL.Path,
+		r.Host,
 		p1,
 		strconv.FormatInt(lastMod.Unix(), 10),
 		strconv.FormatInt(lastPos, 10),
