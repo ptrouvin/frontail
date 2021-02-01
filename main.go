@@ -41,7 +41,7 @@ var (
 	grepRePtr   = flag.String("grep", ".*", "Define the regexp to select lines to push")
 	upgrader    = websocket.Upgrader{
 		ReadBufferSize:  1024,
-		WriteBufferSize: 1024,
+		WriteBufferSize: 4096,
 	}
 	filePosPerIP map[string]int64
 	skipRe       *regexp.Regexp
@@ -330,13 +330,21 @@ func serveHome(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// ws or wss
+	method := "s"
+	if r.Proto == "http" {
+		method = ""
+	}
+
 	var v = struct {
+		Method   string
 		Host     string
 		Data     string
 		LastMod  string
 		LastPos  string
 		Filename string
 	}{
+		method,
 		r.Host,
 		p1,
 		strconv.FormatInt(lastMod.Unix(), 10),
@@ -468,7 +476,7 @@ const homeHTML = `<!DOCTYPE html>
 			var data = document.getElementById("fileData");
 			fmt(input);
 
-			var conn = new WebSocket("ws://{{.Host}}/ws?lastMod={{.LastMod}}&lastPos={{.LastPos}}");
+			var conn = new WebSocket("ws{{.Method}}://{{.Host}}/ws?lastMod={{.LastMod}}&lastPos={{.LastPos}}");
 			conn.onclose = function(evt) {
 				data.textContent = 'Connection closed';
 			}
