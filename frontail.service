@@ -3,7 +3,7 @@ Description=logstream using frontail
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/frontail -config=/etc/frontail/config.ini
+ExecStart=/usr/bin/frontail -config=/etc/frontail/config.ini
 
 [Install]
 WantedBy=multi-user.target
