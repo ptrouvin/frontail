@@ -289,10 +289,10 @@ func serveWs(w http.ResponseWriter, r *http.Request) {
 func serveHome(w http.ResponseWriter, r *http.Request) {
 	var ip = logClientIP(r)
 
-	if r.URL.Path != "/" {
-		http.Error(w, "Not found", http.StatusNotFound)
-		return
-	}
+	// if r.URL.Path != "/" {
+	// 	http.Error(w, "Not found", http.StatusNotFound)
+	// 	return
+	// }
 	if r.Method != "GET" {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -313,11 +313,12 @@ func serveHome(w http.ResponseWriter, r *http.Request) {
 		lastMod = time.Unix(0, 0)
 		lastPos = getFilePos(ip)
 	}
-	log.Debug().
-		Int("Data_length", len(string(p))).
-		Int64("lastMod", lastMod.Unix()).
-		Int64("lastPos", lastPos).
-		Msg("serverHome.readFileIfModified")
+
+	// ws or wss
+	method := ""
+	if r.TLS != nil {
+		method = "s"
+	}
 
 	// filtering strings
 	p1 := ""
@@ -330,11 +331,17 @@ func serveHome(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// ws or wss
-	method := "s"
-	if r.Proto == "http" {
-		method = ""
+	log.Debug().
+		Int("Data_length", len(string(p))).
+		Int64("lastMod", lastMod.Unix()).
+		Int64("lastPos", lastPos).
+		Msg("Method: ws" + method + " serverHome.readFileIfModified")
+
+	ws := strings.Trim(r.URL.Path, "/")
+	if len(ws) > 0 && string(ws[len(ws)-1]) != "/" {
+		ws += "/"
 	}
+	ws += "ws"
 
 	var v = struct {
 		Method   string
@@ -342,6 +349,7 @@ func serveHome(w http.ResponseWriter, r *http.Request) {
 		Data     string
 		LastMod  string
 		LastPos  string
+		Url      string
 		Filename string
 	}{
 		method,
@@ -349,9 +357,17 @@ func serveHome(w http.ResponseWriter, r *http.Request) {
 		p1,
 		strconv.FormatInt(lastMod.Unix(), 10),
 		strconv.FormatInt(lastPos, 10),
+		ws,
 		*filename,
 	}
 	homeTempl.Execute(w, &v)
+}
+
+func serve(w http.ResponseWriter, r *http.Request) {
+	if len(r.URL.Path) >= 3 && r.URL.Path[len(r.URL.Path)-3:] == "/ws" {
+		serveWs(w, r)
+	}
+	serveHome(w, r)
 }
 
 func main() {
@@ -389,9 +405,9 @@ func main() {
 
 	filePosPerIP = make(map[string]int64)
 
-	http.HandleFunc("/", serveHome)
-	http.HandleFunc("/ws", serveWs)
-	if err := http.ListenAndServe(":"+strconv.Itoa(*portPtr), nil); err != nil {
+	var router = http.HandlerFunc(serve)
+
+	if err := http.ListenAndServe(":"+strconv.Itoa(*portPtr), router); err != nil {
 		log.Fatal().
 			Err(err).
 			Msg("ListenAndServe ERROR")
@@ -476,7 +492,7 @@ const homeHTML = `<!DOCTYPE html>
 			var data = document.getElementById("fileData");
 			fmt(input);
 
-			var conn = new WebSocket("ws{{.Method}}://{{.Host}}/ws?lastMod={{.LastMod}}&lastPos={{.LastPos}}");
+			var conn = new WebSocket("ws{{.Method}}://{{.Host}}/{{.Url}}?lastMod={{.LastMod}}&lastPos={{.LastPos}}");
 			conn.onclose = function(evt) {
 				data.textContent = 'Connection closed';
 			}
