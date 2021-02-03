@@ -315,9 +315,9 @@ func serveHome(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// ws or wss
-	method := ""
-	if r.TLS != nil {
-		method = "s"
+	method := "s"
+	if r.URL.Scheme == "http" {
+		method = ""
 	}
 
 	// filtering strings
