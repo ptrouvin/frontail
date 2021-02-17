@@ -87,6 +87,7 @@ func readFileIfModified(lastMod time.Time, lastPos int64) ([]byte, time.Time, in
 	}
 	if !fi.ModTime().After(lastMod) {
 		log.Debug().
+			Int64("file-modtime", fi.ModTime().Unix()).
 			Msg("lastMod>ModTime")
 		return nil, lastMod, lastPos, nil
 	}
@@ -98,28 +99,31 @@ func readFileIfModified(lastMod time.Time, lastPos int64) ([]byte, time.Time, in
 			Msg("Open ERROR")
 		return nil, lastMod, lastPos, nil
 	}
-	lastPos, err = f.Seek(lastPos, 0)
-	if err != nil {
-		log.Error().
-			Err(err).
-			Int64("lastPos", lastPos).
-			Msg("Seek Error")
-		lastPos, err = f.Seek(0, 0)
-	}
-	log.Debug().
-		Int64("fileSize", fi.Size()).
-		Int64("curPos", lastPos).
-		Msg("file Current position")
-	p := []byte("")
 	size2read := fi.Size() - lastPos
 	if size2read <= 0 {
-		size2read = 0
+		// file rotation detected
+		lastPos = 0
+		size2read = fi.Size()
 		log.Debug().
 			Int64("fileSize", fi.Size()).
 			Int64("lastPos", lastPos).
 			Int64("size2read", size2read).
-			Msg("size2read<0")
-	} else {
+			Msg("file rotation: size2read<0")
+	}
+	p := []byte("")
+	if size2read > 0 {
+		lastPos, err = f.Seek(lastPos, 0)
+		if err != nil {
+			log.Error().
+				Err(err).
+				Int64("lastPos", lastPos).
+				Msg("Seek Error")
+			lastPos, err = f.Seek(0, 0)
+		}
+		log.Debug().
+			Int64("fileSize", fi.Size()).
+			Int64("curPos", lastPos).
+			Msg("file Current position")
 		p = make([]byte, size2read)
 		count, err := f.Read(p)
 		if err != nil {
@@ -159,6 +163,7 @@ func readFileIfModified(lastMod time.Time, lastPos int64) ([]byte, time.Time, in
 	return p, fi.ModTime(), curPos, nil
 }
 
+/*
 func reader(ws *websocket.Conn) {
 	defer ws.Close()
 	ws.SetReadLimit(512)
@@ -178,9 +183,10 @@ func reader(ws *websocket.Conn) {
 			Msg("reader.ReadMessage")
 	}
 }
+*/
 
-func writer(ws *websocket.Conn, lastMod time.Time, lastPos int64, ip string) {
-	lastError := ""
+func writer(ws *websocket.Conn, lastMod time.Time, oldLastPos int64, ip string) {
+	lastPos := oldLastPos
 	pingTicker := time.NewTicker(pingPeriod)
 	fileTicker := time.NewTicker(filePeriod)
 	defer func() {
@@ -192,18 +198,8 @@ func writer(ws *websocket.Conn, lastMod time.Time, lastPos int64, ip string) {
 		select {
 		case <-fileTicker.C:
 			var p []byte
-			var err error
 
-			p, lastMod, lastPos, err = readFileIfModified(lastMod, lastPos)
-
-			if err != nil {
-				if s := err.Error(); s != lastError {
-					lastError = s
-					p = []byte(lastError)
-				}
-			} else {
-				lastError = ""
-			}
+			p, lastMod, lastPos, _ = readFileIfModified(lastMod, lastPos)
 
 			if p != nil && len(p) > 0 {
 				for _, line := range strings.Split(strings.TrimSuffix(string(p), "\n"), "\n") {
@@ -211,14 +207,20 @@ func writer(ws *websocket.Conn, lastMod time.Time, lastPos int64, ip string) {
 						log.Debug().Msg("DBG>line sent " + line)
 						ws.SetWriteDeadline(time.Now().Add(writeWait))
 						if err := ws.WriteMessage(websocket.TextMessage, []byte(line+"\n")); err != nil {
+							log.Error().
+								Str("ip", ip).
+								Msg("Closing connection, error on websocket")
 							return
 						}
 					} else {
 						log.Debug().Msg("DBG>line dropped " + line)
 					}
 				}
-				setFilePos(ip, lastPos)
+			} else {
+				time.Sleep(10 * time.Second)
 			}
+			setFilePos(ip, lastPos)
+
 		case <-pingTicker.C:
 			ws.SetWriteDeadline(time.Now().Add(writeWait))
 			if err := ws.WriteMessage(websocket.PingMessage, []byte{}); err != nil {
@@ -253,7 +255,7 @@ func logClientIP(r *http.Request) string {
 	log.Info().
 		Str("ip", userIPstr).
 		Str("port", port).
-		Msg("Connected from")
+		Msgf("Connected from %q:%q", userIPstr, port)
 	return ip
 }
 
@@ -282,8 +284,9 @@ func serveWs(w http.ResponseWriter, r *http.Request) {
 		lastPos = getFilePos(ip)
 	}
 
-	go writer(ws, lastMod, lastPos, ip)
-	reader(ws)
+	writer(ws, lastMod, lastPos, ip)
+	// go writer(ws, lastMod, lastPos, ip)
+	// reader(ws)
 }
 
 func serveHome(w http.ResponseWriter, r *http.Request) {
@@ -316,7 +319,7 @@ func serveHome(w http.ResponseWriter, r *http.Request) {
 
 	// ws or wss
 	method := "s"
-	if r.URL.Scheme == "http" {
+	if r.URL.Scheme == "http" || len(r.URL.Scheme) == 0 {
 		method = ""
 	}
 
