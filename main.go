@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/vharitonsky/iniflags"
@@ -46,6 +47,8 @@ var (
 	filePosPerIP map[string]int64
 	skipRe       *regexp.Regexp
 	grepRe       *regexp.Regexp
+
+	filePosPerIP_lock = sync.Mutex{}
 )
 
 func getFilePos(ip string) int64 {
@@ -70,7 +73,9 @@ func setFilePos(ip string, lastPos int64) {
 		Int64("lastPos", lastPos).
 		Int("filePosPerIP.length", len(filePosPerIP)).
 		Msg("setFilePos")
+	filePosPerIP_lock.Lock()
 	filePosPerIP[ip] = lastPos
+	filePosPerIP_lock.Unlock()
 }
 
 func readFileIfModified(lastMod time.Time, lastPos int64) ([]byte, time.Time, int64, error) {
