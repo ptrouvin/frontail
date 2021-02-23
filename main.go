@@ -68,6 +68,7 @@ func setFilePos(ip string, lastPos int64) {
 	log.Debug().
 		Str("ip", ip).
 		Int64("lastPos", lastPos).
+		Int("filePosPerIP.length", len(filePosPerIP)).
 		Msg("setFilePos")
 	filePosPerIP[ip] = lastPos
 }
@@ -163,8 +164,7 @@ func readFileIfModified(lastMod time.Time, lastPos int64) ([]byte, time.Time, in
 	return p, fi.ModTime(), curPos, nil
 }
 
-/*
-func reader(ws *websocket.Conn) {
+func reader(ws *websocket.Conn, wsIsConnected *int) {
 	defer ws.Close()
 	ws.SetReadLimit(512)
 	ws.SetReadDeadline(time.Now().Add(pongWait))
@@ -175,6 +175,7 @@ func reader(ws *websocket.Conn) {
 			log.Error().
 				Err(err).
 				Msg("reader.ReadMessage ERROR")
+			*wsIsConnected = 0
 			break
 		}
 		log.Info().
@@ -183,9 +184,8 @@ func reader(ws *websocket.Conn) {
 			Msg("reader.ReadMessage")
 	}
 }
-*/
 
-func writer(ws *websocket.Conn, lastMod time.Time, oldLastPos int64, ip string) {
+func writer(ws *websocket.Conn, lastMod time.Time, oldLastPos int64, ip string, wsIsConnected *int) {
 	lastPos := oldLastPos
 	pingTicker := time.NewTicker(pingPeriod)
 	fileTicker := time.NewTicker(filePeriod)
@@ -194,7 +194,7 @@ func writer(ws *websocket.Conn, lastMod time.Time, oldLastPos int64, ip string) 
 		fileTicker.Stop()
 		ws.Close()
 	}()
-	for {
+	for *wsIsConnected == 1 {
 		select {
 		case <-fileTicker.C:
 			var p []byte
@@ -210,7 +210,8 @@ func writer(ws *websocket.Conn, lastMod time.Time, oldLastPos int64, ip string) 
 							log.Error().
 								Str("ip", ip).
 								Msg("Closing connection, error on websocket")
-							return
+							*wsIsConnected = 0
+							break
 						}
 					} else {
 						log.Debug().Msg("DBG>line dropped " + line)
@@ -224,10 +225,12 @@ func writer(ws *websocket.Conn, lastMod time.Time, oldLastPos int64, ip string) 
 		case <-pingTicker.C:
 			ws.SetWriteDeadline(time.Now().Add(writeWait))
 			if err := ws.WriteMessage(websocket.PingMessage, []byte{}); err != nil {
-				return
+				*wsIsConnected = 0
+				break
 			}
 		}
 	}
+	log.Debug().Msg("Writer.Closing ws")
 }
 
 func logClientIP(r *http.Request) string {
@@ -272,6 +275,8 @@ func serveWs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var wsIsConnected int = 1
+
 	var lastMod time.Time
 	if n, err := strconv.ParseInt(r.FormValue("lastMod"), 10, 64); err == nil {
 		lastMod = time.Unix(n, 0)
@@ -284,9 +289,9 @@ func serveWs(w http.ResponseWriter, r *http.Request) {
 		lastPos = getFilePos(ip)
 	}
 
-	writer(ws, lastMod, lastPos, ip)
-	// go writer(ws, lastMod, lastPos, ip)
-	// reader(ws)
+	//writer(ws, lastMod, lastPos, ip)
+	go writer(ws, lastMod, lastPos, ip, &wsIsConnected)
+	go reader(ws, &wsIsConnected)
 }
 
 func serveHome(w http.ResponseWriter, r *http.Request) {
