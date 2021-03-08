@@ -24,7 +24,8 @@ const (
 	writeWait = 10 * time.Second
 
 	// Time allowed to read the next pong message from the client.
-	pongWait = 60 * time.Second
+	//pongWait = 60 * time.Second
+	pongWait = 0
 
 	// Send pings to client with this period. Must be less than pongWait.
 	pingPeriod = (pongWait * 9) / 10
@@ -172,7 +173,11 @@ func readFileIfModified(lastMod time.Time, lastPos int64) ([]byte, time.Time, in
 func reader(ws *websocket.Conn, wsIsConnected *int) {
 	defer ws.Close()
 	ws.SetReadLimit(512)
-	ws.SetReadDeadline(time.Now().Add(pongWait))
+	if pongWait > 0 {
+		ws.SetReadDeadline(time.Now().Add(pongWait))
+	} else {
+		ws.SetReadDeadline(time.Time{})
+	}
 	ws.SetPongHandler(func(string) error { ws.SetReadDeadline(time.Now().Add(pongWait)); return nil })
 	for {
 		mtype, msg, err := ws.ReadMessage()
@@ -192,10 +197,10 @@ func reader(ws *websocket.Conn, wsIsConnected *int) {
 
 func writer(ws *websocket.Conn, lastMod time.Time, oldLastPos int64, ip string, wsIsConnected *int) {
 	lastPos := oldLastPos
-	pingTicker := time.NewTicker(pingPeriod)
+	//pingTicker := time.NewTicker(pingPeriod)
 	fileTicker := time.NewTicker(filePeriod)
 	defer func() {
-		pingTicker.Stop()
+		//pingTicker.Stop()
 		fileTicker.Stop()
 		ws.Close()
 	}()
@@ -227,12 +232,12 @@ func writer(ws *websocket.Conn, lastMod time.Time, oldLastPos int64, ip string, 
 			}
 			setFilePos(ip, lastPos)
 
-		case <-pingTicker.C:
+			/* case <-pingTicker.C:
 			ws.SetWriteDeadline(time.Now().Add(writeWait))
 			if err := ws.WriteMessage(websocket.PingMessage, []byte{}); err != nil {
 				*wsIsConnected = 0
 				break
-			}
+			} */
 		}
 	}
 	log.Debug().Msg("Writer.Closing ws")
@@ -250,14 +255,15 @@ func logClientIP(r *http.Request) string {
 	if err != nil {
 		log.Error().
 			Err(err).
-			Msgf("userip: %q is not IP:port", IPAddress)
+			Msgf("SplitHostPort: %q is not IP:port", IPAddress)
+		return IPAddress
 	}
 
 	userIP := net.ParseIP(ip)
 	if userIP == nil {
 		log.Error().
-			Msgf("userip: %q is not IP:port", IPAddress)
-		return ""
+			Msgf("userip: %q is not IP", IPAddress)
+		return IPAddress
 	}
 	userIPstr := userIP.String()
 	log.Info().
