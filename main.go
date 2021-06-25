@@ -41,6 +41,7 @@ var (
 	homeTempl   = template.Must(template.New("").Parse(homeHTML))
 	filename    = flag.String("filename", "", "Filename to publish")
 	grepRePtr   = flag.String("grep", ".*", "Define the regexp to select lines to push")
+	forceTLSPtr = flag.Bool("force-tls", false, "Force wss protocol whatever HTTP or HTTPS (usefull when behind a reverse-proxy)")
 	upgrader    = websocket.Upgrader{
 		ReadBufferSize:  1024,
 		WriteBufferSize: 4096,
@@ -335,7 +336,7 @@ func serveHome(w http.ResponseWriter, r *http.Request) {
 
 	// ws or wss
 	method := "s"
-	if r.URL.Scheme == "http" || len(r.URL.Scheme) == 0 {
+	if !(*forceTLSPtr) && (r.URL.Scheme == "http" || len(r.URL.Scheme) == 0) {
 		method = ""
 	}
 
@@ -418,9 +419,13 @@ func main() {
 		grepRe = regexp.MustCompile(`(?m)` + *grepRePtr)
 	}
 
+	var forceTLSstring = "FALSE"
+	if *forceTLSPtr {
+		forceTLSstring = "TRUE"
+	}
 	log.Info().
 		Str("loglevel", *loglevelPtr).
-		Msg("frontail started, monitoring file(" + *filename + ") SKIP=" + *skipRePtr + " GREP=" + *grepRePtr)
+		Msg("frontail started, monitoring file(" + *filename + ") SKIP=" + *skipRePtr + " GREP=" + *grepRePtr + " FORCE-TLS=" + forceTLSstring)
 
 	filePosPerIP = make(map[string]int64)
 
