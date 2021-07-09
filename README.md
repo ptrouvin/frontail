@@ -1,6 +1,13 @@
-# README #
+# README # Frontail: streaming file to the browser and follow tail
 
-Frontail: streaming file to the browser and follow tail
+- [README # Frontail: streaming file to the browser and follow tail](#readme--frontail-streaming-file-to-the-browser-and-follow-tail)
+    - [What is this repository for?](#what-is-this-repository-for)
+    - [Quick Start](#quick-start)
+    - [Who do I talk to?](#who-do-i-talk-to)
+  - [systemd service](#systemd-service)
+- [DEBIAN package build](#debian-package-build)
+- [Test with traefik](#test-with-traefik)
+  
 
 ### What is this repository for?
 Frontail is written in Go to provide a fast and easy way to stream contents of any file to the browser via an inbuilt web server and follow tail. This is inspired from [Frontail](https://github.com/mthenw/frontail]) by Maciej Winnicki, hence the name.
@@ -65,3 +72,28 @@ cd ..
 
 * the location of the .deb package
 Into the main directory:
+
+
+# Test with traefik
+* [traefik documentation](https://doc.traefik.io/traefik/providers/docker/)
+* [traefik.yaml is located at](file:///home/pascal/Progs/oasis/logstream/frontail/traefik/traefik.yml)
+* traefik container
+```shell
+docker run -ti --rm --name traefik -v $PWD:/etc/traefik -p 80:80 -p 443:443 -p 18080:8080 -v /var/run/docker.sock:/var/run/docker.sock traefik
+```
+* [traefik dashboard](http://127.0.0.1:18080/dashboard/#/http/routers/frontail@docker)
+
+* rebuild the frontail container:
+```shell
+docker build -t frontail .
+```
+
+* launch frontail container
+```shell
+docker run -ti --name frontail --rm -v $PWD/test.data:/var/log/eos/logstream-for-tcl.log -l traefik.enable=true -v $PWD/config.ini:/etc/frontail/config.ini frontail
+```
+
+* [test with curl](https://frontail.docker.localhost)
+```shell
+curl -vk https://frontail.docker.localhost
+```

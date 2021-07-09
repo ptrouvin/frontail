@@ -1,9 +1,14 @@
-FROM alpine
+FROM debian
+
+RUN mkdir -p /etc/frontail /var/log/eos /app/ && adduser --disabled-password --no-create-home --gecos "" --home "/app" frontail
+COPY frontail /app/
+COPY config.ini /etc/frontail/
 
 WORKDIR /app
+EXPOSE 8081
 
-COPY frontail .
+VOLUME [ "/var/log/eos" ]
 
-EXPOSE 8080
+USER frontail
 
-ENTRYPOINT ["/app/frontail"]
+CMD ["/app/frontail","-config=/etc/frontail/config.ini"]
